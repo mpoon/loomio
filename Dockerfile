@@ -1,50 +1,29 @@
-# Base image
+# Use the official Ruby image as base
 FROM ruby:2.7.6
 
-# Set environment variables
-ENV LANG C.UTF-8
-ENV RAILS_ENV production
-ENV RAILS_SERVE_STATIC_FILES true
-ENV RAILS_LOG_TO_STDOUT true
-ENV CANONICAL_HOST localhost
-ENV REPLY_HOSTNAME localhost
-ENV CANONICAL_PORT 8080
-ENV SUPPORT_EMAIL "support <support@localhost>"
-ENV SMTP_DOMAIN localhost
-ENV RACK_ATTACK_RATE_MULTPLIER 10
+# Install nodejs and yarn
+RUN curl -sL https://deb.nodesource.com/setup_14.x | bash - && \
+    apt-get install -y nodejs && \
+    curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | tee /usr/share/keyrings/yarnkey.gpg >/dev/null && \
+    echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && apt-get install -y yarn
 
-# Install dependencies
-RUN apt-get update -qq && apt-get install -y nodejs postgresql-client yarn
-
-# Install Chrome for e2e tests
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable
-
-# Create a directory for the app
-RUN mkdir /app
+# Set the working directory
 WORKDIR /app
 
-# Add Gemfile and install gems
-COPY ./Gemfile /app/Gemfile
-COPY ./Gemfile.lock /app/Gemfile.lock
+# Copy Gemfile and Gemfile.lock and install gems
+COPY Gemfile Gemfile.lock ./
 RUN bundle install
 
-# Add package.json and install npm packages
-COPY ./vue/package.json /app/vue/package.json
-COPY ./vue/package-lock.json /app/vue/package-lock.json
-RUN cd /app/vue && npm ci
+# Copy package.json and package-lock.json and install packages
+COPY vue/package.json vue/package-lock.json ./vue/
+RUN cd vue && yarn install
 
-# Copy the app code
-COPY . /app
+# Copy the rest of the application code
+COPY . .
 
-# Precompile assets
-RUN cd /app/vue && npm run build && \
-    bundle exec rake assets:precompile
-
-# Expose the port for the Rails server
+# Expose the port the app will run on
 EXPOSE 8080
 
-# Start the Rails server
-CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "8080"]
+# Start the application
+CMD ["sh", "-c", "rails s -b 0.0.0.0 -p 8080"]
